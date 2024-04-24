@@ -1,0 +1,27 @@
+{
+  "canisters": {
+    "motoko-token-swap-backend": {
+      "candid": "src/motoko-token-swap-backend/motoko-token-swap-backend.did",
+      "package": "motoko-token-swap-backend",
+      "type": "rust"
+    },
+    "motoko-token-swap-frontend": {
+      "dependencies": [
+        "motoko-token-swap-backend"
+      ],
+      "source": [
+        "src/motoko-token-swap-frontend/dist"
+      ],
+      "type": "assets",
+      "workspace": "motoko-token-swap-frontend"
+    }
+  },
+  "defaults": {
+    "build": {
+      "args": "",
+      "packtool": ""
+    }
+  },
+  "output_env_file": ".env",
+  "version": 1
+}
