@@ -1,3 +1,10 @@
+type Allowance = record { allowance : nat; expires_at : opt nat64 };
+type Result = variant { Ok : nat; Err : text };
+type Result_1 = variant { Ok : Allowance; Err : text };
 service : {
-    "greet": (text) -> (text) query;
+  __get_candid_interface_tmp_hack : () -> (text) query;
+  check_subaccount_balance : (principal) -> (Result);
+  get_allowance : (principal) -> (Result_1);
+  get_subaccount : (principal) -> (blob) query;
+  handle_transaction : (nat) -> (Result);
 }

@@ -13,7 +13,10 @@
         "src/motoko-token-swap-frontend/dist"
       ],
       "type": "assets",
-      "workspace": "motoko-token-swap-frontend"
+      "workspace": "motoko-token-swap-frontend",
+      "declarations": {
+        "env_override": ""
+      }
     }
   },
   "defaults": {
