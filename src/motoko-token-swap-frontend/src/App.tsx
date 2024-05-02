@@ -1,43 +1,58 @@
-import { useState } from "react";
-import { Actor } from "@dfinity/agent";
-import { _SERVICE as _ICRC1_LEDGER_SERVICE, idlFactory as icrc1LedgerIdlFactory } from "./declarations/icrc1_ledger.js";
-import {
-  idlFactory,
-  _SERVICE as _BACKEND_SERVICE,
-} from "../../declarations/motoko-token-swap-backend/motoko-token-swap-backend.did.js";
+import { useEffect, useState } from "react";
 import { principalToSubAccount } from "@dfinity/utils";
 import { Principal } from "@dfinity/principal";
-
-interface TransactionObject {
-  to: string;
-  strAmount: string;
-  token: string;
-  opts?: {
-    fee?: number;
-    memo?: string;
-    from_subaccount?: number[] | Uint8Array;
-    created_at_time?: {
-      timestamp_nanos: number;
-    };
-  };
-}
-
-const backend_canister = "skfly-zaaaa-aaaap-ahc5q-cai";
-const new_ledger_canister = "zfcdd-tqaaa-aaaaq-aaaga-cai";
+import { backendActor, toLedger, fromLedger, getBalance, host, ledgerActor, swap_canister } from "./actors";
 
 function App() {
-  // const [greeting, setGreeting] = useState("");
   const [isLoading, setIsLoading] = useState(false);
+  const [fromBalanceSwap, setFromBalanceSwap] = useState(0);
+  const [toBalanceSwap, setToBalanceSwap] = useState(0);
+  const [fromBalanceUser, setfromBalanceUser] = useState(0);
+  const [toBalanceUser, setToBalanceUser] = useState(0);
+
+  useEffect(() => {
+    getSwapBalances();
+  }, []);
+
+  async function getSwapBalances() {
+    try {
+      setFromBalanceSwap(await getBalance(swap_canister, fromLedger));
+      setToBalanceSwap(await getBalance(swap_canister, toLedger));
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async function getUserBalances(principal: string) {
+    try {
+      setfromBalanceUser(await getBalance(principal, fromLedger));
+      setToBalanceUser(await getBalance(principal, toLedger));
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  async function handleSwapFlow() {
+    try {
+      const principal = await login();
+      if (principal) {
+        getUserBalances(principal);
+        await handleApprove(Principal.fromText(principal));
+      }
+    } catch (error) {
+      console.log(error);
+    }
+  }
 
   async function login() {
     try {
       setIsLoading(true);
-      const publicKey = await (window as any).ic.plug.requestConnect({
-        whitelist: [backend_canister, new_ledger_canister],
-        host: "https://icp0.io",
+      await (window as any).ic.plug.requestConnect({
+        whitelist: [swap_canister, fromLedger, toLedger],
+        host,
       });
-      console.log(`The connected user's public key is:`, publicKey);
-      console.log((window as any).ic.plug.agent);
+      const principal: string = (window as any).ic.plug.principalId;
+      return principal;
     } catch (e) {
       console.log(e);
     } finally {
@@ -45,37 +60,16 @@ function App() {
     }
   }
 
-  function backendActor() {
-    let actor = Actor.createActor<_BACKEND_SERVICE>(idlFactory, {
-      agent: (window as any).ic.plug.agent,
-      canisterId: "skfly-zaaaa-aaaap-ahc5q-cai",
-    });
-    return actor;
-  }
-
-  async function ledgerActor() {
-    const agent = (window as any).ic.plug.agent;
-
-    const actor = Actor.createActor<_ICRC1_LEDGER_SERVICE>(icrc1LedgerIdlFactory, {
-      agent: agent,
-      canisterId: new_ledger_canister,
-    });
-
-    return actor;
-  }
-
-  async function handleApprove() {
+  async function handleApprove(principal: Principal) {
     try {
-      const principal = Principal.fromText((window as any).ic.plug.principalId);
-      const ledger = await ledgerActor();
-
+      const ledger = await ledgerActor(fromLedger);
       const balanceOfCaller = await ledger.icrc1_balance_of({ owner: principal, subaccount: [] });
-      const approveResponse = await ledger.icrc2_approve({
+      await ledger.icrc2_approve({
         spender: {
-          owner: Principal.fromText(backend_canister),
+          owner: Principal.fromText(swap_canister),
           subaccount: [principalToSubAccount(principal)],
         },
-        amount: 100000000n,
+        amount: balanceOfCaller,
         from_subaccount: [],
         created_at_time: [],
         expected_allowance: [],
@@ -84,29 +78,55 @@ function App() {
         memo: [],
       });
 
-      console.log({ balanceOfCaller, transactionResponse: approveResponse });
-    } catch (error) {
-      console.log(error);
-    }
-  }
+      const allowance = await ledger.icrc2_allowance({
+        account: {
+          owner: principal,
+          subaccount: [],
+        },
+        spender: {
+          owner: Principal.fromText(swap_canister),
+          subaccount: [principalToSubAccount(principal)],
+        },
+      });
 
-  async function handleTransfer() {
-    try {
-      const result = await backendActor().handle_transaction(10000000n);
+      console.log({ balanceOfCaller, allowance });
+      const result = await backendActor().swap(Principal.fromText(fromLedger), Principal.fromText(toLedger));
+      await getSwapBalances();
+      await getUserBalances(principal.toString());
       console.log(result);
     } catch (error) {
       console.log(error);
     }
   }
 
+  function renderSwapBalances() {
+    return (
+      <div>
+        <h6>Swap</h6>
+        <p>From Balance: {fromBalanceSwap}</p>
+        <p>To Balance: {toBalanceSwap}</p>
+      </div>
+    );
+  }
+
+  function renderUserBalances() {
+    return (
+      <div>
+        <h6>User</h6>
+        <p>From Balance: {fromBalanceUser}</p>
+        <p>To Balance: {toBalanceUser}</p>
+      </div>
+    );
+  }
+
   return (
     <main>
       <img src="/logo2.svg" alt="DFINITY logo" />
       <br />
+      {renderSwapBalances()}
+      {renderUserBalances()}
       <br />
-      <button onClick={login}>{isLoading ? "..." : "login"}</button>
-      <button onClick={handleApprove}>{isLoading ? "..." : "allowance"}</button>
-      <button onClick={handleTransfer}>{isLoading ? "..." : "transfer"}</button>
+      <button onClick={handleSwapFlow}>{isLoading ? "..." : "Swap"}</button>
       {/* <form action="#" onSubmit={handleSubmit}>
         <label htmlFor="name">Enter your name: &nbsp;</label>
         <input id="name" alt="Name" type="text" />
