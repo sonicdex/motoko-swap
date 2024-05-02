@@ -68,7 +68,7 @@ impl Ledger {
             ic_cdk::call(self.0, "icrc2_transfer_from", (transfer_from_args,)).await;
 
         match result {
-            Ok((Ok(_),)) => Ok(transfer_amount),
+            Ok((Ok(height),)) => Ok(height),
             Ok((Err(err),)) => Err(format!("Error: {:?}", err)),
             Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
         }

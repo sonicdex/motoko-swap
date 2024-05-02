@@ -1,4 +1,4 @@
-use candid::{export_service, Principal};
+use candid::{export_service, Nat, Principal};
 use ic_cdk::{caller, query, update};
 
 use crate::{ledger::Ledger, types::FromResult};
@@ -12,7 +12,7 @@ pub async fn swap(from: Principal, to: Principal) -> Result<FromResult, String> 
     let allowance = from_ledger.get_allowance(caller()).await?;
 
     // Transfer the FROM tokens to this canister under the caller's subaccount
-    let transferred_amount = from_ledger
+    let _blockheight = from_ledger
         .from_ledger_to_canister_transaction(caller(), allowance.allowance.clone())
         .await?;
 
@@ -22,20 +22,15 @@ pub async fn swap(from: Principal, to: Principal) -> Result<FromResult, String> 
     // initalize the TO ledger
     let to_ledger = Ledger::new(to);
 
-    // Check the balance of the TO tokens on this canister
-    let to_balance = to_ledger.get_balance(None).await?;
-
     // transfer the FROM token amount to the caller
     let to_transfer = to_ledger
-        .from_canister_to_caller_transaction(caller(), transferred_amount.clone())
+        .from_canister_to_caller_transaction(caller(), from_balance.clone())
         .await?;
 
     Ok(FromResult {
-        allowance: allowance.allowance,
-        transferred_amount,
-        subaccount_balance: from_balance,
-        to_balance,
-        to_transfer,
+        from_allowance: allowance.allowance,
+        caller_canister_balance: from_balance,
+        to_transfer_amount: to_transfer,
     })
 }
 

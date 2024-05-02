@@ -2,9 +2,7 @@ use candid::{CandidType, Nat};
 
 #[derive(Clone, Debug, CandidType)]
 pub struct FromResult {
-    pub allowance: Nat,
-    pub transferred_amount: Nat,
-    pub subaccount_balance: Nat,
-    pub to_balance: Nat,
-    pub to_transfer: Nat,
+    pub from_allowance: Nat,
+    pub caller_canister_balance: Nat,
+    pub to_transfer_amount: Nat,
 }
