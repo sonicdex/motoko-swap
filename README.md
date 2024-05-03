@@ -1,61 +1,63 @@
-# motoko-token-swap
+# Internet Computer Token Swap
 
-Welcome to your new motoko-token-swap project and to the Internet Computer development community. By default, creating a new project adds this README and some template files to your project directory. You can edit these template files to customize your project and to include your own code to speed up the development cycle.
+This repository contains a token swapping system for the Internet Computer (IC), specifically designed to work with tokens adhering to the ICRC2 standard. It allows users to swap an "old" token for a "new" token using a dedicated swap canister.
 
-To get started, you might want to explore the project directory structure and the default configuration file. Working with this project in your development environment will not affect any production deployment or identity tokens.
+## Prerequisites
 
-To learn more before you start working with motoko-token-swap, see the following documentation available online:
+Before starting the swap process, update the `constants.ts` file with the correct canister addresses:
 
-- [Quick Start](https://internetcomputer.org/docs/current/developer-docs/setup/deploy-locally)
-- [SDK Developer Tools](https://internetcomputer.org/docs/current/developer-docs/setup/install)
-- [Rust Canister Development Guide](https://internetcomputer.org/docs/current/developer-docs/backend/rust/)
-- [ic-cdk](https://docs.rs/ic-cdk)
-- [ic-cdk-macros](https://docs.rs/ic-cdk-macros)
-- [Candid Introduction](https://internetcomputer.org/docs/current/developer-docs/backend/candid/)
+- `fromLedger`: The Principal ID of the token you want to swap from.
+- `toLedger`: The Principal ID of the token you want to swap to.
+- `swapCanister`: The Principal ID of the canister that handles the swap, included in this repository.
 
-If you want to start working on your project right away, you might want to try the following commands:
+## Configuration
 
-```bash
-cd motoko-token-swap/
-dfx help
-dfx canister --help
+```typescript
+// Token you want to swap from (give allowance to the swap canister)
+export const fromLedger = "aaaaa-aa";
+
+// Token you want to swap to (transfer these tokens to the swap canister before initiating the swap)
+export const toLedger = "bbbbb-bb";
+
+// Swap canister (backend canister that facilitates the swap, included in this repository)
+export const swapCanister = "ccccc-cc";
+
+export const debugMode = true;
+export const host = "https://ic0.app";
 ```
 
-## Running the project locally
+### Swap Process Flow
 
-If you want to test your project locally, you can use the following commands:
+Here's how the token swap process works step-by-step:
 
-```bash
-# Starts the replica, running in the background
-dfx start --background
+1. **Approval**: The user makes an approve call for the swap canister, setting the allowance for the amount of tokens to be swapped.
+2. **Validation**: The swap canister checks if it has enough of the new token available for the swap.
+3. **Transfer**:
+   - If enough tokens are available, the canister:
+   - Transfers the approved amount of old tokens to itself under the user's subaccount.
+   - Transfers the equivalent amount of new tokens to the user.
+   - Moves the old tokens from the user's subaccount to the default subaccount (used for tracking total amounts swapped).
+   - If insufficient tokens are available, the transaction is cancelled, and the user is notified to retry.
 
-# Deploys your canisters to the replica and generates your candid interface
-dfx deploy
-```
+### Transaction Fees
 
-Once the job completes, your application will be available at `http://localhost:4943?canisterId={asset_canister_id}`.
+The token swap process involves three distinct transactions, each incurring a network fee:
 
-If you have made changes to your backend canister, you can generate a new candid interface with
+1. **Approval Transaction**: This is the first transaction where the user approves the swap canister to handle the specified amount of old tokens. This transaction is necessary to authorize the swap canister to transfer tokens on behalf of the user.
 
-```bash
-npm run generate
-```
+2. **Swap Execution Transaction**: After approval, the swap canister executes the swap if it has sufficient new tokens. This includes transferring the old tokens to the swap canister's subaccount and the new tokens to the user's account.
 
-at any time. This is recommended before starting the frontend development server, and will be run automatically any time you run `dfx deploy`.
+3. **Reconciliation Transaction**: The final transaction involves the swap canister moving the swapped old tokens from the user's subaccount to a default subaccount for tracking purposes.
 
-If you are making frontend changes, you can start a development server with
+Each of these transactions requires a fee, which is dependent on the network's current transaction cost. Users must ensure that they have enough balance to cover these fees in addition to the tokens being swapped. It is advisable to check the current fee rates on the Internet Computer network to estimate the total cost of the swap process.
 
-```bash
-npm start
-```
+### Notes
 
-Which will start a server at `http://localhost:8080`, proxying API requests to the replica at port 4943.
+- Ensure that both tokens involved in the swap support the ICRC2 standard.
+- The repository includes debug mode for additional logging and tracing during development.
+- This is 1:1 swap (excluding fees)
 
-### Note on frontend environment variables
+### Getting Started
 
-If you are hosting frontend code somewhere without using DFX, you may need to make one of the following adjustments to ensure your project does not fetch the root key in production:
-
-- set`DFX_NETWORK` to `ic` if you are using Webpack
-- use your own preferred method to replace `process.env.DFX_NETWORK` in the autogenerated declarations
-  - Setting `canisters -> {asset_canister_id} -> declarations -> env_override to a string` in `dfx.json` will replace `process.env.DFX_NETWORK` with the string in the autogenerated declarations
-- Write your own `createActor` constructor
+To use this swap, clone the repository, configure your tokens as described, and deploy it to the IC.
+Detailed deployment instructions will depend on your specific environment and setup requirements.

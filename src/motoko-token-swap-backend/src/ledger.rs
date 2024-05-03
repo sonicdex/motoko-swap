@@ -2,18 +2,25 @@ use candid::{Nat, Principal};
 use ic_cdk::{api::call::RejectionCode, id};
 use ic_ledger_types::Subaccount;
 use icrc_ledger_types::{
-    icrc1::account::Account,
+    icrc1::{
+        account::Account,
+        transfer::{TransferArg, TransferError},
+    },
     icrc2::{
         allowance::{Allowance, AllowanceArgs},
         transfer_from::{TransferFromArgs, TransferFromError},
     },
 };
 
-pub struct Ledger(Principal);
+pub struct Ledger(Principal, Nat);
 
 impl Ledger {
     pub fn new(canister: Principal) -> Self {
-        Self(canister)
+        Self(canister, Nat::from(0u32))
+    }
+
+    pub fn set_fee(&mut self, fee: Nat) {
+        self.1 = fee;
     }
 
     pub async fn get_allowance(&self, principal: Principal) -> Result<Allowance, String> {
@@ -33,19 +40,17 @@ impl Ledger {
 
         match result {
             Ok(ok) => Ok(ok.0),
-            Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
+            Err((code, msg)) => Err(format!("get_allowance, Error: {:?} {:?}", code, msg)),
         }
     }
 
-    pub async fn from_ledger_to_canister_transaction(
+    pub async fn transfer_from_to_swap_subaccount(
         &self,
         from: Principal,
         amount: Nat,
     ) -> Result<Nat, String> {
         let subaccount = Subaccount::from(from).0;
-        let fee: Nat = self.get_fee().await?;
 
-        let transfer_amount: Nat = amount - (fee.clone() + fee.clone()); // amount - approve - transfer
         let transfer_from_args = TransferFromArgs {
             spender_subaccount: Some(subaccount),
             from: {
@@ -58,20 +63,13 @@ impl Ledger {
                 owner: id(),
                 subaccount: Some(subaccount),
             },
-            amount: transfer_amount.clone(),
-            fee: None,
+            amount: amount.clone() - self.1.clone(),
+            fee: Some(self.1.clone()),
             memo: None,
             created_at_time: None,
         };
 
-        let result: Result<(Result<Nat, TransferFromError>,), (RejectionCode, String)> =
-            ic_cdk::call(self.0, "icrc2_transfer_from", (transfer_from_args,)).await;
-
-        match result {
-            Ok((Ok(height),)) => Ok(height),
-            Ok((Err(err),)) => Err(format!("Error: {:?}", err)),
-            Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
-        }
+        self.transfer_from(transfer_from_args).await
     }
 
     pub async fn get_balance(&self, principal: Option<Principal>) -> Result<Nat, String> {
@@ -90,7 +88,7 @@ impl Ledger {
 
         match result {
             Ok((balance,)) => Ok(balance),
-            Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
+            Err((code, msg)) => Err(format!("get_balance, Error: {:?} {:?}", code, msg)),
         }
     }
 
@@ -99,42 +97,90 @@ impl Ledger {
         to: Principal,
         amount: Nat,
     ) -> Result<Nat, String> {
-        let fee: Nat = self.get_fee().await?;
-        let transfer_from_args = TransferFromArgs {
-            spender_subaccount: None,
-            from: {
-                Account {
-                    owner: id(),
-                    subaccount: None,
-                }
-            },
+        let transfer_arg = TransferArg {
+            memo: None,
+            amount: amount - self.1.clone(),
+            fee: Some(self.1.clone()),
+            from_subaccount: None,
             to: Account {
                 owner: to,
                 subaccount: None,
             },
-            amount: amount - fee.clone(),
-            fee: Some(fee),
+            created_at_time: None,
+        };
+
+        self.transfer(transfer_arg).await
+    }
+
+    pub async fn from_canister_to_subaccount_to_caller_transaction(
+        &self,
+        to: Principal,
+        amount: Nat,
+    ) -> Result<Nat, String> {
+        let transfer_arg = TransferArg {
+            memo: None,
+            amount,
+            fee: Some(self.1.clone()),
+            from_subaccount: Some(Subaccount::from(to).0),
+            to: Account {
+                owner: to,
+                subaccount: None,
+            },
+            created_at_time: None,
+        };
+
+        self.transfer(transfer_arg).await
+    }
+
+    pub async fn internal_transaction(
+        &self,
+        principal: Principal,
+        amount: Nat,
+    ) -> Result<Nat, String> {
+        let transfer_arg = TransferArg {
+            from_subaccount: Some(Subaccount::from(principal).0),
+            to: Account {
+                owner: id(),
+                subaccount: None,
+            },
+            amount: amount - self.1.clone(),
+            fee: None,
             memo: None,
             created_at_time: None,
         };
 
-        let result: Result<(Result<Nat, TransferFromError>,), (RejectionCode, String)> =
-            ic_cdk::call(self.0, "icrc2_transfer_from", (transfer_from_args,)).await;
-
-        match result {
-            Ok((Ok(height),)) => Ok(height),
-            Ok((Err(err),)) => Err(format!("Error: {:?}", err)),
-            Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
-        }
+        self.transfer(transfer_arg).await
     }
 
-    async fn get_fee(&self) -> Result<Nat, String> {
+    pub async fn get_fee(&self) -> Result<Nat, String> {
         let result: Result<(Nat,), (RejectionCode, String)> =
             ic_cdk::call(self.0, "icrc1_fee", ()).await;
 
         match result {
             Ok((fee,)) => Ok(fee),
-            Err((code, msg)) => Err(format!("Error: {:?} {:?}", code, msg)),
+            Err((code, msg)) => Err(format!("get_fee, Error: {:?} {:?}", code, msg)),
+        }
+    }
+
+    async fn transfer(&self, transfer_args: TransferArg) -> Result<Nat, String> {
+        let result: Result<(Result<Nat, TransferError>,), (RejectionCode, String)> =
+            ic_cdk::call(self.0, "icrc1_transfer", (transfer_args,)).await;
+
+        match result {
+            Ok((Ok(height),)) => Ok(height),
+            Ok((Err(err),)) => Err(format!("transfer, Error: {:?}", err)),
+            Err((code, msg)) => Err(format!("transfer, Error: {:?} {:?}", code, msg)),
+        }
+    }
+
+    async fn transfer_from(&self, transfer_from_args: TransferFromArgs) -> Result<Nat, String> {
+        let result: Result<(Result<Nat, TransferFromError>,), (RejectionCode, String)> =
+            ic_cdk::call(self.0, "icrc2_transfer_from", (transfer_from_args,)).await;
+
+        match result {
+            Ok((Ok(height),)) => Ok(height),
+            Ok((Err(err),)) => Err(format!("transfer_from, Error: {:?}", err)),
+            Err((code, msg)) => Err(format!("transfer_from, Error: {:?} {:?}", code, msg)),
         }
     }
 }

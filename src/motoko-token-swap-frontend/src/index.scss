@@ -3,35 +3,39 @@ body {
   font-size: 1.5rem;
 }
 
-img {
-  max-width: 50vw;
-  max-height: 25vw;
-  display: block;
-  margin: auto;
-}
-
-form {
+.container {
   display: flex;
-  justify-content: center;
-  gap: 0.5em;
-  flex-flow: row wrap;
-  max-width: 40vw;
-  margin: auto;
-  align-items: baseline;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-around;
+  height: 100vh;
 }
 
-button[type="submit"] {
-  padding: 5px 20px;
-  margin: 10px auto;
-  float: right;
+.token-display {
+  background-color: lightblue;
+  padding: 16px 32px;
+  border-radius: 16px;
+  margin-bottom: 16px;
 }
 
-#greeting {
-  margin: 10px auto;
-  padding: 10px 60px;
-  border: 1px solid #222;
+.token-container {
+  background-color: lightcyan;
+  display: flex;
+  flex-direction: column;
 }
 
-#greeting:empty {
-  display: none;
+.actions {
+  display: flex;
+  flex-direction: column;
+
+  button {
+    padding: 16px 32px;
+    margin-top: 8px;
+  }
+}
+
+@media screen and (max-width: 768px) {
+  .container {
+    flex-direction: column;
+  }
 }

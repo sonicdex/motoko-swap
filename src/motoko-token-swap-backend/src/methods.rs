@@ -1,37 +1,71 @@
-use candid::{export_service, Nat, Principal};
+use candid::{export_service, Principal};
 use ic_cdk::{caller, query, update};
 
-use crate::{ledger::Ledger, types::FromResult};
+use crate::ledger::Ledger;
 
 #[update]
-pub async fn swap(from: Principal, to: Principal) -> Result<FromResult, String> {
+pub async fn swap(from: Principal, to: Principal) -> Result<String, String> {
     // initalize the FROM ledger
-    let from_ledger = Ledger::new(from);
+    let mut from_ledger = Ledger::new(from);
+    from_ledger.set_fee(from_ledger.get_fee().await?);
 
-    // Check if the client has set the correct allowance on the FROM ledger
+    // initalize the TO ledger
+    let mut to_ledger = Ledger::new(to);
+    to_ledger.set_fee(to_ledger.get_fee().await?);
+
+    // Check if the caller has set the correct allowance for the SWAP canister on the FROM ledger
     let allowance = from_ledger.get_allowance(caller()).await?;
+
+    // Check if the TO ledger has enough balance to transfer to the caller
+    if to_ledger.get_balance(None).await? < allowance.allowance {
+        return Err("Transaction cancelled: TO ledger does not have enough balance".to_string());
+    }
 
     // Transfer the FROM tokens to this canister under the caller's subaccount
     let _blockheight = from_ledger
-        .from_ledger_to_canister_transaction(caller(), allowance.allowance.clone())
+        .transfer_from_to_swap_subaccount(caller(), allowance.allowance.clone())
         .await?;
 
     // Check the balance of the caller's subaccount on this canister
     let from_balance = from_ledger.get_balance(Some(caller())).await?;
 
-    // initalize the TO ledger
-    let to_ledger = Ledger::new(to);
-
     // transfer the FROM token amount to the caller
-    let to_transfer = to_ledger
+    to_ledger
         .from_canister_to_caller_transaction(caller(), from_balance.clone())
         .await?;
 
-    Ok(FromResult {
-        from_allowance: allowance.allowance,
-        caller_canister_balance: from_balance,
-        to_transfer_amount: to_transfer,
-    })
+    // Finally transfer old tokens from caller's subaccount to the canister default subaccount
+    // This way we can keep track of the old tokens that are swapped
+    from_ledger
+        .internal_transaction(caller(), from_balance.clone())
+        .await?;
+
+    Ok("Transaction successful".to_string())
+}
+
+#[update]
+async fn _dev_transfer_to_caller(from: Principal) -> Result<(), String> {
+    let mut from_ledger = Ledger::new(from);
+    from_ledger.set_fee(from_ledger.get_fee().await?);
+
+    let from_balance = from_ledger.get_balance(None).await?;
+    from_ledger
+        .from_canister_to_caller_transaction(caller(), from_balance.clone())
+        .await?;
+
+    Ok(())
+}
+
+#[update]
+async fn _dev_transfer_to_subaccount_to_caller(from: Principal) -> Result<(), String> {
+    let mut from_ledger = Ledger::new(from);
+    from_ledger.set_fee(from_ledger.get_fee().await?);
+    let from_balance = from_ledger.get_balance(Some(caller())).await?;
+    from_ledger
+        .from_canister_to_subaccount_to_caller_transaction(caller(), from_balance.clone())
+        .await?;
+
+    Ok(())
 }
 
 #[query(name = "__get_candid_interface_tmp_hack")]

@@ -1,139 +1,155 @@
-import { useEffect, useState } from "react";
-import { principalToSubAccount } from "@dfinity/utils";
+import { useState } from "react";
+import { TokenDisplay } from "./components";
+import { debugMode, fromLedger, host, swapCanister, toLedger } from "./misc/constants";
+import { Agent } from "@dfinity/agent";
+import { ledgerActor, swapActor } from "./actors";
 import { Principal } from "@dfinity/principal";
-import { backendActor, toLedger, fromLedger, getBalance, host, ledgerActor, swap_canister } from "./actors";
+import { principalToSubAccount } from "@dfinity/utils";
+
+const _window = window as any;
 
 function App() {
-  const [isLoading, setIsLoading] = useState(false);
-  const [fromBalanceSwap, setFromBalanceSwap] = useState(0);
-  const [toBalanceSwap, setToBalanceSwap] = useState(0);
-  const [fromBalanceUser, setfromBalanceUser] = useState(0);
-  const [toBalanceUser, setToBalanceUser] = useState(0);
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [isSettingAllowance, setIsSettingAllowance] = useState(false);
+  const [isSwapping, setIsSwapping] = useState(false);
+  const [userPrincipal, setUserPrincipal] = useState<Principal | undefined>(undefined);
+  const [agent, setAgent] = useState<Agent | undefined>(undefined);
+  const [update, setUpdate] = useState(false);
 
-  useEffect(() => {
-    getSwapBalances();
-  }, []);
-
-  async function getSwapBalances() {
+  async function handleLogin() {
     try {
-      setFromBalanceSwap(await getBalance(swap_canister, fromLedger));
-      setToBalanceSwap(await getBalance(swap_canister, toLedger));
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  async function getUserBalances(principal: string) {
-    try {
-      setfromBalanceUser(await getBalance(principal, fromLedger));
-      setToBalanceUser(await getBalance(principal, toLedger));
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  async function handleSwapFlow() {
-    try {
-      const principal = await login();
-      if (principal) {
-        getUserBalances(principal);
-        await handleApprove(Principal.fromText(principal));
-      }
-    } catch (error) {
-      console.log(error);
-    }
-  }
-
-  async function login() {
-    try {
-      setIsLoading(true);
-      await (window as any).ic.plug.requestConnect({
-        whitelist: [swap_canister, fromLedger, toLedger],
+      setIsLoggingIn(true);
+      await _window.ic.plug.requestConnect({
+        whitelist: [swapCanister, fromLedger, toLedger],
         host,
       });
-      const principal: string = (window as any).ic.plug.principalId;
-      return principal;
+      const principalString: string = _window.ic.plug.principalId;
+      setUserPrincipal(Principal.fromText(principalString));
+      setAgent(_window.ic.plug.agent);
     } catch (e) {
       console.log(e);
     } finally {
-      setIsLoading(false);
+      setIsLoggingIn(false);
     }
   }
 
-  async function handleApprove(principal: Principal) {
+  async function setAllowance() {
+    if (!userPrincipal) {
+      return;
+    }
     try {
-      const ledger = await ledgerActor(fromLedger);
-      const balanceOfCaller = await ledger.icrc1_balance_of({ owner: principal, subaccount: [] });
-      await ledger.icrc2_approve({
+      setIsSettingAllowance(true);
+
+      // These calls are public and can be done anonymously which improves speed
+      const anomymousLedger = ledgerActor(fromLedger);
+      const callerBalance = await anomymousLedger.icrc1_balance_of({ owner: userPrincipal, subaccount: [] });
+      const fee = await anomymousLedger.icrc1_fee();
+
+      // This call requires authentication from the caller
+      await ledgerActor(fromLedger, agent).icrc2_approve({
         spender: {
-          owner: Principal.fromText(swap_canister),
-          subaccount: [principalToSubAccount(principal)],
+          owner: Principal.fromText(swapCanister),
+          subaccount: [principalToSubAccount(userPrincipal)],
         },
-        amount: balanceOfCaller,
+        amount: callerBalance - fee,
         from_subaccount: [],
         created_at_time: [],
         expected_allowance: [],
         expires_at: [],
-        fee: [],
+        fee: [fee],
         memo: [],
       });
 
-      const allowance = await ledger.icrc2_allowance({
-        account: {
-          owner: principal,
-          subaccount: [],
-        },
-        spender: {
-          owner: Principal.fromText(swap_canister),
-          subaccount: [principalToSubAccount(principal)],
-        },
-      });
+      setUpdate((prevstate) => !prevstate);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsSettingAllowance(false);
+    }
+  }
 
-      console.log({ balanceOfCaller, allowance });
-      const result = await backendActor().swap(Principal.fromText(fromLedger), Principal.fromText(toLedger));
-      await getSwapBalances();
-      await getUserBalances(principal.toString());
+  async function handleSwap() {
+    try {
+      setIsSwapping(true);
+      const result = await swapActor(agent).swap(Principal.fromText(fromLedger), Principal.fromText(toLedger));
+      setUpdate((prevstate) => !prevstate);
       console.log(result);
+    } catch (error) {
+      console.log(error);
+    } finally {
+      setIsSwapping(false);
+    }
+  }
+
+  async function claimBack() {
+    try {
+      const result = await swapActor(agent)._dev_transfer_to_caller(Principal.fromText(fromLedger));
+      console.log(result);
+      setUpdate((prevstate) => !prevstate);
     } catch (error) {
       console.log(error);
     }
   }
 
-  function renderSwapBalances() {
-    return (
-      <div>
-        <h6>Swap</h6>
-        <p>From Balance: {fromBalanceSwap}</p>
-        <p>To Balance: {toBalanceSwap}</p>
-      </div>
-    );
+  async function claimBackSub() {
+    try {
+      const result = await swapActor(agent)._dev_transfer_to_subaccount_to_caller(Principal.fromText(fromLedger));
+      console.log(result);
+      setUpdate((prevstate) => !prevstate);
+    } catch (error) {
+      console.log(error);
+    }
   }
 
-  function renderUserBalances() {
+  async function automatedSwap() {
+    try {
+      await handleLogin();
+      await setAllowance();
+      await handleSwap();
+    } catch (error) {
+      console.log(error);
+    }
+  }
+
+  function renderActions() {
+    if (debugMode) {
+      return (
+        <div className="actions">
+          <button disabled={!!userPrincipal} onClick={handleLogin}>
+            {isLoggingIn ? "..." : "Login"}
+          </button>
+          <button disabled={!userPrincipal} onClick={setAllowance}>
+            {isSettingAllowance ? "..." : "Set allowance"}
+          </button>
+          <button disabled={!userPrincipal} onClick={handleSwap}>
+            {isSwapping ? "..." : "Swap"}
+          </button>
+          <br />
+
+          <button disabled={!userPrincipal} onClick={claimBack}>
+            {isLoggingIn ? "..." : "transfer FROM swap balance back to caller"}
+          </button>
+          <button disabled={!userPrincipal} onClick={claimBackSub}>
+            {isLoggingIn ? "..." : "transfer FROM swap subaccount balance back to caller"}
+          </button>
+        </div>
+      );
+    }
     return (
-      <div>
-        <h6>User</h6>
-        <p>From Balance: {fromBalanceUser}</p>
-        <p>To Balance: {toBalanceUser}</p>
+      <div className="actions">
+        <button onClick={automatedSwap}>{isLoggingIn ? "..." : "Swap"}</button>
       </div>
     );
   }
 
   return (
-    <main>
-      <img src="/logo2.svg" alt="DFINITY logo" />
-      <br />
-      {renderSwapBalances()}
-      {renderUserBalances()}
-      <br />
-      <button onClick={handleSwapFlow}>{isLoading ? "..." : "Swap"}</button>
-      {/* <form action="#" onSubmit={handleSubmit}>
-        <label htmlFor="name">Enter your name: &nbsp;</label>
-        <input id="name" alt="Name" type="text" />
-        <button type="submit">Click Me!</button>
-      </form>
-      <section id="greeting">{greeting}</section> */}
-    </main>
+    <div>
+      <div className="container">
+        <TokenDisplay title="From" canisterId={fromLedger} userPrincipal={userPrincipal} update={update} />
+        {renderActions()}
+        <TokenDisplay title="To" canisterId={toLedger} userPrincipal={userPrincipal} update={update} />
+      </div>
+    </div>
   );
 }
 
