@@ -1,10 +1,10 @@
 {
-  "name": "motoko-token-swap-frontend",
+  "name": "token-swap-frontend",
   "private": true,
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "setup": "npm i && dfx canister create motoko-token-swap-backend && dfx generate motoko-token-swap-backend && dfx deploy",
+    "setup": "npm i && dfx canister create token-swap-backend && dfx generate token-swap-backend && dfx deploy",
     "start": "vite --port 3000",
     "prebuild": "dfx generate",
     "build": "tsc && vite build",

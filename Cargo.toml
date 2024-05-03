@@ -1,5 +1,5 @@
 [workspace]
 members = [
-    "src/motoko-token-swap-backend"
+    "src/token-swap-backend"
 ]
 resolver = "2"

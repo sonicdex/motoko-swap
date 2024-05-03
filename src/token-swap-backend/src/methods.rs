@@ -83,7 +83,7 @@ pub fn candid() {
     let dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap());
     // let dir = dir.parent().unwrap();
     write(
-        dir.join(format!("motoko-token-swap-backend.did")),
+        dir.join(format!("token-swap-backend.did")),
         __export_did_tmp_(),
     )
     .expect("Write failed.");

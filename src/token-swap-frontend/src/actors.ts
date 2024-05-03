@@ -3,7 +3,7 @@ import { _SERVICE as _ICRC1_LEDGER_SERVICE, idlFactory as icrc1LedgerIdlFactory 
 import {
   idlFactory,
   _SERVICE as _BACKEND_SERVICE,
-} from "../../declarations/motoko-token-swap-backend/motoko-token-swap-backend.did.js";
+} from "../../declarations/token-swap-backend/token-swap-backend.did.js";
 import { host, swapCanister } from "./misc/constants";
 
 export function swapActor(agent: Agent | undefined) {

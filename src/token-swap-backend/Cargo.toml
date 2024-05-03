@@ -1,5 +1,5 @@
 [package]
-name = "motoko-token-swap-backend"
+name = "token-swap-backend"
 version = "0.1.0"
 edition = "2021"
 

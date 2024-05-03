@@ -1,0 +1,8 @@
+type Result = variant { Ok; Err : text };
+type Result_1 = variant { Ok : text; Err : text };
+service : {
+  __get_candid_interface_tmp_hack : () -> (text) query;
+  _dev_transfer_to_caller : (principal) -> (Result);
+  _dev_transfer_to_subaccount_to_caller : (principal) -> (Result);
+  swap : (principal, principal) -> (Result_1);
+}

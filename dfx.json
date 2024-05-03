@@ -1,19 +1,19 @@
 {
   "canisters": {
-    "motoko-token-swap-backend": {
-      "candid": "src/motoko-token-swap-backend/motoko-token-swap-backend.did",
-      "package": "motoko-token-swap-backend",
+    "token-swap-backend": {
+      "candid": "src/token-swap-backend/token-swap-backend.did",
+      "package": "token-swap-backend",
       "type": "rust"
     },
-    "motoko-token-swap-frontend": {
+    "token-swap-frontend": {
       "dependencies": [
-        "motoko-token-swap-backend"
+        "token-swap-backend"
       ],
       "source": [
-        "src/motoko-token-swap-frontend/dist"
+        "src/token-swap-frontend/dist"
       ],
       "type": "assets",
-      "workspace": "motoko-token-swap-frontend",
+      "workspace": "token-swap-frontend",
       "declarations": {
         "env_override": ""
       }

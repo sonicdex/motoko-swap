@@ -1,8 +1,8 @@
 {
-  "motoko-token-swap-backend": {
+  "token-swap-backend": {
     "ic": "skfly-zaaaa-aaaap-ahc5q-cai"
   },
-  "motoko-token-swap-frontend": {
+  "token-swap-frontend": {
     "ic": "s7c2v-yiaaa-aaaap-ahc6a-cai"
   }
 }
